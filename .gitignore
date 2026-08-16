@@ -1,0 +1,8 @@
+.env
+venv/
+__pycache__/
+*.pyc
+data/
+*.db
+static/generated/*
+!static/generated/.gitkeep

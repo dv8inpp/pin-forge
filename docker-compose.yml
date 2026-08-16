@@ -1,0 +1,12 @@
+services:
+  pinforge:
+    build: .
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    volumes:
+      # Persist the SQLite database and generated pin images across restarts/rebuilds
+      - ./data:/app/data
+      - ./static/generated:/app/static/generated
+    restart: unless-stopped

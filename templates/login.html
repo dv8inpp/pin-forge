@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign in — PinForge</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <style>
+    .login-wrap {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .login-card {
+      width: 100%;
+      max-width: 360px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 32px 28px;
+    }
+    .login-wordmark {
+      font-family: 'Shoulders', sans-serif;
+      font-weight: 700;
+      font-size: 32px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .login-wordmark .spark { color: var(--ember); }
+    .login-sub {
+      font-family: 'GeistM', monospace;
+      font-size: 11px;
+      color: var(--text-faint);
+      letter-spacing: 0.06em;
+      margin-bottom: 28px;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="login-wordmark">PIN<span class="spark">FORGE</span></div>
+      <div class="login-sub">SIGN IN TO CONTINUE</div>
+
+      {% if error %}
+        <div class="error-box show">{{ error }}</div>
+      {% endif %}
+
+      <form method="POST" action="{{ url_for('login', next=request.args.get('next')) }}">
+        <label class="field-label" for="password">Password</label>
+        <input type="password" id="password" name="password" autofocus required>
+        <button class="btn btn-forge" type="submit">Sign In</button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

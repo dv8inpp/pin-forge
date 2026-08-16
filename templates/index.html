@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PinForge — {{ brand_name }}</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body data-pinterest-sandbox="{{ 'true' if pinterest_sandbox else 'false' }}">
+  <div class="wrap">
+
+    <header class="masthead">
+      <div>
+        <div class="wordmark">PIN<span class="spark">FORGE</span></div>
+        <div class="masthead-sub">PRODUCT URL &rarr; PIN &rarr; {{ brand_name|upper }}</div>
+      </div>
+      <div style="display:flex; align-items:center; gap:12px;">
+        {% if pinterest_sandbox %}
+          <div class="status-pill" style="border-color:#D9A441; color:#D9A441;" title="PINTEREST_USE_SANDBOX=1 in .env — pins publish successfully but are only visible to you, not the public. Required while on Trial access.">
+            <span class="dot" style="background:#D9A441;"></span>SANDBOX MODE
+          </div>
+        {% endif %}
+        {% if pinterest_connected %}
+          <div class="status-pill on"><span class="dot"></span>PINTEREST CONNECTED
+            <a class="connect" href="/auth/pinterest" title="Re-authorize (needed after any scope/permission change)">reconnect &rarr;</a>
+          </div>
+        {% else %}
+          <div class="status-pill off"><span class="dot"></span>PINTEREST NOT CONNECTED
+            <a class="connect" href="/auth/pinterest">connect &rarr;</a>
+          </div>
+        {% endif %}
+        <form method="POST" action="/logout" style="margin:0;">
+          <button type="submit" class="btn-icon" style="padding:9px 14px;">Sign out</button>
+        </form>
+      </div>
+    </header>
+
+    <div class="console">
+
+      <!-- INTAKE -->
+      <section class="panel">
+        <p class="panel-label">01 &middot; Intake</p>
+
+        <div class="error-box" id="generate-error"></div>
+
+        <label class="field-label" for="amazon-url">Product URL</label>
+        <input type="text" id="amazon-url" placeholder="https://www.amazon.com/dp/B0XXXXXXX or any retailer's product page">
+
+        <div id="override-link-row" style="display:none;">
+          <label class="field-label" for="affiliate-override">Affiliate link <span style="color:var(--text-faint); text-transform:none; letter-spacing:0;">(no profile matches this domain — paste your network's link)</span></label>
+          <input type="text" id="affiliate-override" placeholder="https://... your network-generated tracking link">
+        </div>
+
+        <details id="manual-entry-details">
+          <summary style="cursor:pointer; font-family:'GeistM',monospace; font-size:12px; color:var(--ember-bright); letter-spacing:0.03em; margin-bottom:12px;">+ Enter product details manually</summary>
+          <div style="margin-top:10px;">
+            <p class="hint" style="margin-top:0;">Use this if auto-detect fails — some sites (Amazon especially) block automated page reads with a CAPTCHA that looks like success but returns no data. Right-click the product photo on the real page and "Copy image address" for the image URL.</p>
+            <label class="field-label" for="manual-title">Title</label>
+            <input type="text" id="manual-title" placeholder="Fullstar Vegetable Chopper">
+            <label class="field-label" for="manual-price">Price <span style="color:var(--text-faint); text-transform:none;">(optional)</span></label>
+            <input type="text" id="manual-price" placeholder="$26.99">
+            <label class="field-label" for="manual-image">Image URL</label>
+            <input type="text" id="manual-image" placeholder="https://... direct link to the product photo">
+          </div>
+        </details>
+
+        <button class="btn btn-forge" id="forge-btn" onclick="forgePin()">
+          Forge Pin
+        </button>
+        <p class="hint">Amazon URLs use the Creators API (falls back to a light page read if you're not yet eligible). Any other retailer is scraped directly from the page, using an affiliate link from a configured retailer profile below — or one you paste in yourself.</p>
+      </section>
+
+      <!-- BENCH -->
+      <section class="panel">
+        <p class="panel-label">02 &middot; Bench</p>
+
+        <div id="bench-empty" class="bench-empty">
+          <div class="big">Nothing on the bench</div>
+          Paste a product URL and forge a pin to see the proof here.
+        </div>
+
+        <div id="bench-content" style="display:none;"></div>
+      </section>
+    </div>
+
+    <!-- RETAILERS -->
+    <section class="ledger" id="retailers-section">
+      <p class="panel-label">03 &middot; Retailers — affiliate link profiles</p>
+      <div class="panel">
+        <p class="hint" style="margin-top:0;">
+          Amazon works out of the box. For any other retailer (Walmart, Best Buy,
+          Target, eBay, or a merchant on ShareASale/CJ/Rakuten/Awin/Impact), add
+          a profile here: a domain to match, and the deep-link template your
+          network gave you, with <code>{url}</code> where the product page URL
+          goes. No profile for a domain? You can still forge a pin — just paste
+          the network's ready-made affiliate link for that product when prompted.
+        </p>
+
+        <div id="retailer-list" class="watch-list" style="margin-bottom:16px;"></div>
+
+        <details class="add-watch">
+          <summary>+ Add a retailer profile</summary>
+          <div class="add-watch-form">
+            <label class="field-label">Label</label>
+            <input type="text" id="retailer-label" placeholder="Walmart (ShareASale)">
+
+            <label class="field-label">Domain</label>
+            <input type="text" id="retailer-domain" placeholder="walmart.com">
+
+            <label class="field-label">Link template <span style="color:var(--text-faint); text-transform:none;">(optional — leave blank to always paste manually)</span></label>
+            <input type="text" id="retailer-template" placeholder="https://www.shareasale.com/r.cfm?u=YOURID&urllink={url}">
+
+            <button class="btn btn-ghost" onclick="addRetailer()">Save profile</button>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <!-- LEDGER -->
+    <section class="ledger">
+      <p class="panel-label">04 &middot; Ledger — recent pins</p>
+      <div class="panel" style="padding: 8px 22px 4px;">
+        {% if recent_pins %}
+        <table class="ledger-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Title</th>
+              <th>Retailer</th>
+              <th>Price</th>
+              <th>Clicks</th>
+              <th>Status</th>
+              <th>Created</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in recent_pins %}
+            <tr id="ledger-row-{{ p.id }}">
+              <td><img class="ledger-thumb" src="/{{ p.generated_image_path }}" alt=""></td>
+              <td class="led-title">{{ p.pin_title }}<br><span class="led-id">#{{ p.id }} &middot; {{ p.asin or '—' }}</span></td>
+              <td class="led-id">{{ p.retailer_label or 'Amazon' }}</td>
+              <td class="led-id">{{ p.product_price or '—' }}</td>
+              <td class="led-id">{{ p.click_count or '—' }}</td>
+              <td>
+                {% if p.status == 'published' %}
+                  <span class="tag published">Published</span>
+                {% else %}
+                  <span class="tag draft">Draft</span>
+                {% endif %}
+              </td>
+              <td class="led-id">{{ p.created_at[:10] }}</td>
+              <td>
+                <button class="btn-icon" onclick="openPin({{ p.id }})" title="Open on the Bench">Open</button>
+                <button class="wc-remove" onclick="deletePin({{ p.id }}, {{ 'true' if p.status == 'published' else 'false' }})" title="Delete this pin">✕</button>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="empty-ledger">No pins forged yet — the first one you make will show up here.</p>
+        {% endif %}
+      </div>
+    </section>
+
+    <!-- ANALYTICS -->
+    <section class="ledger" id="analytics-section">
+      <p class="panel-label">05 &middot; Analytics — click tracking</p>
+      <div class="panel">
+        <p class="hint" style="margin-top:0;">
+          Every published pin routes through PinForge's own redirect before
+          reaching the affiliate link — that's what makes this data
+          possible, since none of the affiliate networks report clicks back
+          to a self-hosted tool. This counts clicks, not confirmed sales;
+          check each network's own dashboard for actual commission data.
+        </p>
+
+        <div class="stat-row" id="analytics-stats"></div>
+
+        <div class="analytics-layout">
+          <div>
+            <p class="sub-label">Top pins by clicks</p>
+            <div id="analytics-top-pins"><p class="empty-ledger-small">No clicks recorded yet.</p></div>
+          </div>
+          <div>
+            <p class="sub-label">Clicks by retailer</p>
+            <div id="analytics-by-retailer"><p class="empty-ledger-small">No clicks recorded yet.</p></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SCOUT -->
+    <section class="ledger" id="scout-section">
+      <p class="panel-label">06 &middot; Scout — automated discovery <span style="font-family:'Instrument',sans-serif; text-transform:none; letter-spacing:0; font-size:12px; color:var(--text-faint);">(Amazon only)</span></p>
+      <div class="panel">
+
+        <div class="scout-layout">
+          <div class="scout-watches">
+            <p class="sub-label">Watching</p>
+            <div id="watch-list" class="watch-list"></div>
+
+            <details class="add-watch">
+              <summary>+ Add a category to watch</summary>
+              <div class="add-watch-form">
+                <label class="field-label">Label</label>
+                <input type="text" id="watch-label" placeholder="Kitchen gadgets">
+
+                <label class="field-label">Amazon category</label>
+                <select id="watch-category"></select>
+
+                <label class="field-label">Keywords (optional)</label>
+                <input type="text" id="watch-keywords" placeholder="wireless charger">
+
+                <div class="watch-filter-row">
+                  <div>
+                    <label class="field-label">Min rating</label>
+                    <input type="text" id="watch-min-rating" placeholder="4.0">
+                  </div>
+                  <div>
+                    <label class="field-label">Min reviews</label>
+                    <input type="text" id="watch-min-reviews" placeholder="50">
+                  </div>
+                </div>
+                <div class="watch-filter-row">
+                  <div>
+                    <label class="field-label">Min price ($)</label>
+                    <input type="text" id="watch-min-price" placeholder="">
+                  </div>
+                  <div>
+                    <label class="field-label">Max price ($)</label>
+                    <input type="text" id="watch-max-price" placeholder="">
+                  </div>
+                </div>
+
+                <button class="btn btn-ghost" onclick="addWatch()">Save watch</button>
+              </div>
+            </details>
+
+            <button class="btn btn-forge" style="margin-top:14px;" onclick="runScout()" id="run-scout-btn">
+              Run Scout Now
+            </button>
+            <p class="hint" id="scout-run-result"></p>
+          </div>
+
+          <div class="scout-queue">
+            <p class="sub-label">Review queue</p>
+            <div id="candidate-list" class="candidate-list">
+              <p class="empty-ledger">No candidates yet — add a watch and run Scout.</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </div>
+
+  <template id="candidate-row-template">
+    <div class="candidate-row">
+      <img class="candidate-thumb" src="" alt="">
+      <div class="candidate-info">
+        <div class="candidate-title"></div>
+        <div class="candidate-meta"></div>
+      </div>
+      <div class="candidate-actions">
+        <button class="btn-icon reject" title="Reject">✕</button>
+        <button class="btn-icon approve" title="Approve — forge a pin">✓ Forge</button>
+      </div>
+    </div>
+  </template>
+
+  <template id="bench-template">
+    <div class="proof">
+      <div>
+        <div class="proof-frame">
+          <span class="reg-mark tl"></span><span class="reg-mark tr"></span>
+          <span class="reg-mark bl"></span><span class="reg-mark br"></span>
+          <img id="proof-img" src="" alt="Generated pin preview">
+        </div>
+        <div class="source-tag" id="source-tag"></div>
+      </div>
+      <div class="proof-fields">
+        <div class="price-tag" id="price-tag"></div>
+
+        <div class="field-row">
+          <label class="field-label">Pin title</label>
+          <input type="text" id="pin-title-input" maxlength="100">
+        </div>
+
+        <div class="field-row">
+          <label class="field-label">Pin description</label>
+          <textarea id="pin-desc-input" maxlength="800"></textarea>
+          <div class="char-count"><span id="desc-count">0</span>/800</div>
+        </div>
+
+        <label class="field-label">Affiliate link</label>
+        <div class="link-line" id="affiliate-link"></div>
+
+        <div id="landing-page-section" style="margin-bottom:16px;">
+          <label class="field-label">Store product <span style="color:var(--text-faint); text-transform:none; letter-spacing:0;">(optional — publishes a real product on your site that shows up in New Arrivals/Shop, and sends Pinterest there instead of straight to the affiliate link)</span></label>
+          <div id="landing-page-empty">
+            <button class="btn btn-ghost" id="landing-page-btn" onclick="createLandingPage()" type="button">
+              Publish as product on reallygoodgadgets.store
+            </button>
+          </div>
+          <div id="landing-page-created" style="display:none;">
+            <div class="link-line" id="landing-page-url" style="color:var(--sage); border-color:var(--sage);"></div>
+          </div>
+        </div>
+
+        <div class="publish-row">
+          <div>
+            <label class="field-label" for="board-select">Pinterest board</label>
+            <select id="board-select" {% if not pinterest_connected %}disabled{% endif %}>
+              {% if not pinterest_connected %}
+                <option value="">Connect Pinterest to see boards</option>
+              {% else %}
+                <option value="">— choose a board —</option>
+                {% for b in boards %}
+                  <option value="{{ b.id }}">{{ b.name }}</option>
+                {% endfor %}
+                {% if not boards %}
+                  <option value="" disabled>No boards found (or Pinterest's board list is temporarily broken — use the manual ID field below)</option>
+                {% endif %}
+              {% endif %}
+            </select>
+          </div>
+          <button class="btn btn-publish" id="publish-btn" onclick="publishPin()" {% if not pinterest_connected %}disabled{% endif %}>
+            Publish
+          </button>
+        </div>
+
+        <details style="margin-top:-8px; margin-bottom:16px;">
+          <summary style="cursor:pointer; font-family:'GeistM',monospace; font-size:11.5px; color:var(--text-muted); letter-spacing:0.03em;">Board not listed? Enter its ID manually</summary>
+          <div style="margin-top:10px;">
+            <p class="hint" style="margin-top:0;">Pinterest's board-listing endpoint is sometimes unreliable, especially in Sandbox mode — if your board doesn't show up above but you know its ID (visible in the URL when viewing the board on pinterest.com, or in the response after creating one via the API), paste it here. This overrides the dropdown when filled in.</p>
+            <input type="text" id="board-id-override" placeholder="e.g. 1146588455072414369">
+          </div>
+        </details>
+
+        <div id="published-status"></div>
+      </div>
+    </div>
+  </template>
+
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
