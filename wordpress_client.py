@@ -17,6 +17,7 @@ across the whole funnel: Pinterest -> your WordPress page (tracked by
 whatever analytics you already run there, e.g. Site Kit) -> /go/<id>
 (tracked by PinForge) -> the real affiliate link.
 """
+import html
 import os
 import requests
 
@@ -37,6 +38,13 @@ def _site_url() -> str:
 
 def is_configured() -> bool:
     return bool(_get_auth() and _site_url())
+
+
+def _error_detail(e: requests.HTTPError) -> str:
+    """WordPress puts the useful part of an error (e.g. "Sorry, you are not
+    allowed to create posts as this user.") in the response body, not the
+    status line."""
+    return e.response.text if e.response is not None else str(e)
 
 
 def _download_image(url: str) -> tuple[bytes, str]:
@@ -66,10 +74,17 @@ def _upload_media(image_bytes: bytes, filename: str, content_type: str) -> int:
 
 
 def _build_content_html(title: str, price: str | None, description: str,
-                         image_url: str, tracking_link: str, brand_name: str) -> str:
+                         tracking_link: str, brand_name: str) -> str:
     # Note: the product image is not repeated here -- create_landing_page()
     # already uploads it and sets it as the post's featured image, and the
     # site's single.php template renders that above the content.
+    # Pin text comes from scraped product data, so escape it before it
+    # goes into the post HTML.
+    title = html.escape(title)
+    description = html.escape(description)
+    brand_name = html.escape(brand_name)
+    tracking_link = html.escape(tracking_link, quote=True)
+    price = html.escape(price) if price else None
     price_line = f"<p><strong>{price}</strong></p>" if price else ""
     return f"""
 <h2>{title}</h2>
@@ -117,12 +132,12 @@ def create_landing_page(
     try:
         media_id = _upload_media(image_bytes, filename, content_type)
     except requests.HTTPError as e:
-        raise ValueError(f"WordPress rejected the image upload: {e}")
+        raise ValueError(f"WordPress rejected the image upload: {_error_detail(e)}")
     except Exception as e:
         raise ValueError(f"Could not reach WordPress to upload the image: {e}")
 
     content_html = _build_content_html(
-        pin_title, price, pin_description, product_image_url, tracking_link, brand_name
+        pin_title, price, pin_description, tracking_link, brand_name
     )
 
     auth = _get_auth()
@@ -141,7 +156,7 @@ def create_landing_page(
         )
         resp.raise_for_status()
     except requests.HTTPError as e:
-        raise ValueError(f"WordPress rejected the page: {e}")
+        raise ValueError(f"WordPress rejected the page: {_error_detail(e)}")
     except Exception as e:
         raise ValueError(f"Could not reach WordPress to create the page: {e}")
 
