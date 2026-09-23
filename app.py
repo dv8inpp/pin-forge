@@ -493,13 +493,10 @@ def api_publish_pin(pin_id):
 @app.route("/api/pins/<int:pin_id>/landing-page", methods=["POST"])
 @limiter.limit("30 per hour")
 def api_create_landing_page(pin_id):
-    """Publishes this pin as a real WooCommerce product (External/Affiliate
-    type) on your own site, so Pinterest can send traffic there instead of
-    straight to the affiliate link -- and since it's a real product, not
-    just a blog post, it shows up in New Arrivals / Shop / category pages
-    automatically, with zero theme changes needed. Optional -- skip this
-    and Publish falls back to the direct tracking link, same as before
-    this feature existed."""
+    """Publishes a product page on your own WordPress site for this pin,
+    so Pinterest can send traffic there instead of straight to the
+    affiliate link. Optional -- skip this and Publish falls back to the
+    direct tracking link, same as before this feature existed."""
     pin = db.get_pin(pin_id)
     if not pin:
         return jsonify({"error": "Pin not found."}), 404
@@ -508,18 +505,20 @@ def api_create_landing_page(pin_id):
     if not base_url or "localhost" in base_url:
         return jsonify({
             "error": "APP_BASE_URL isn't set to your real public domain in "
-                     ".env -- the product's Shop Now button needs a real "
-                     "tracking link to point at."
+                     ".env -- the landing page's Shop Now button needs a "
+                     "real tracking link to point at."
         }), 400
     tracking_link = f"{base_url}/go/{pin_id}"
 
     try:
-        result = wordpress_client.create_affiliate_product(
+        result = wordpress_client.create_landing_page(
             pin_title=pin["pin_title"],
             pin_description=pin["pin_description"],
             price=pin.get("product_price"),
             product_image_url=pin["product_image_url"],
             tracking_link=tracking_link,
+            brand_name=os.environ.get("BRAND_NAME", "Your Brand"),
+            status="draft",
         )
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
