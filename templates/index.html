@@ -20,6 +20,11 @@
             <span class="dot" style="background:#D9A441;"></span>SANDBOX MODE
           </div>
         {% endif %}
+        {% if pinterest_error %}
+          <div class="status-pill off" style="border-color:#C0392B; color:#C0392B;" title="Pinterest authorization failed ({{ pinterest_error }}). If you didn't deny access, check the redirect URI in your Pinterest app settings.">
+            <span class="dot" style="background:#C0392B;"></span>PINTEREST AUTH FAILED
+          </div>
+        {% endif %}
         {% if pinterest_connected %}
           <div class="status-pill on"><span class="dot"></span>PINTEREST CONNECTED
             <a class="connect" href="/auth/pinterest" title="Re-authorize (needed after any scope/permission change)">reconnect &rarr;</a>

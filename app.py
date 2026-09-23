@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from flask import Flask, render_template, request, jsonify, redirect, session, url_for
 from dotenv import load_dotenv
 from werkzeug.middleware.proxy_fix import ProxyFix
+from oauthlib.oauth2.rfc6749.errors import OAuth2Error
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 
@@ -152,6 +153,7 @@ def index():
         "index.html",
         pinterest_connected=pinterest_connected,
         pinterest_sandbox=pinterest_sandbox,
+        pinterest_error=request.args.get("pinterest_error"),
         boards=boards,
         recent_pins=recent_pins,
         retailer_profiles=retailer_profiles,
@@ -170,8 +172,23 @@ def auth_pinterest():
 
 @app.route("/auth/pinterest/callback")
 def auth_pinterest_callback():
-    state = session.get("pinterest_oauth_state")
-    token = pinterest_client.exchange_code_for_token(request.url, state)
+    # Pinterest redirects here without a code when the user denies access or
+    # the app config is wrong (e.g. redirect URI mismatch); it may also be hit
+    # directly. Bail out cleanly instead of letting oauthlib raise a 500.
+    error = request.args.get("error")
+    if error or not request.args.get("code"):
+        app.logger.warning(
+            "Pinterest OAuth callback without code: error=%s description=%s",
+            error, request.args.get("error_description"),
+        )
+        return redirect(url_for("index", pinterest_error=error or "missing_code"))
+
+    state = session.pop("pinterest_oauth_state", None)
+    try:
+        token = pinterest_client.exchange_code_for_token(request.url, state)
+    except OAuth2Error as e:
+        app.logger.warning("Pinterest token exchange failed: %s", e)
+        return redirect(url_for("index", pinterest_error=e.error or "token_exchange_failed"))
     db.save_token("pinterest", token)
     return redirect(url_for("index"))
 
